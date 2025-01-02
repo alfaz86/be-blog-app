@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { getFormattedImagePath } = require('../utils/imageHelper');
 
 // Registrasi
 exports.register = async (req, res) => {
@@ -13,7 +14,7 @@ exports.register = async (req, res) => {
 
   try {
     // Periksa apakah email atau username sudah terdaftar
-    const [existingUser] = await db.promise().query('SELECT * FROM users WHERE email = ? OR username = ?', [email, username]);
+    const [existingUser] = await db.query('SELECT * FROM users WHERE email = ? OR username = ?', [email, username]);
     if (existingUser.length > 0) {
       return res.status(400).json({ message: 'Email or username already registered' });
     }
@@ -22,7 +23,7 @@ exports.register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Simpan pengguna
-    const [result] = await db.promise().query(
+    const [result] = await db.query(
       'INSERT INTO users (name, email, username, password) VALUES (?, ?, ?, ?)',
       [name, email, username, hashedPassword]
     );
@@ -39,7 +40,7 @@ exports.login = async (req, res) => {
 
   try {
     // Cari pengguna berdasarkan email atau username
-    const [users] = await db.promise().query(
+    const [users] = await db.query(
       'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1',
       [identifier, identifier]
     );
@@ -58,7 +59,13 @@ exports.login = async (req, res) => {
 
     // Buat token JWT
     const token = jwt.sign(
-      { id: user.id, username: user.username },
+      {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        profile_image: getFormattedImagePath(user.profile_image),
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_TTL || '1h' }
     );
@@ -71,7 +78,7 @@ exports.login = async (req, res) => {
         name: user.name,
         username: user.username,
         email: user.email,
-        profile_image: user.profile_image
+        profile_image: getFormattedImagePath(user.profile_image)
       }
     });
   } catch (error) {
@@ -84,7 +91,7 @@ exports.profile = async (req, res) => {
   const { user } = req;
 
   try {
-    const [users] = await db.promise().query('SELECT * FROM users WHERE id = ?', [user.id]);
+    const [users] = await db.query('SELECT * FROM users WHERE id = ?', [user.id]);
 
     if (users.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
@@ -92,6 +99,7 @@ exports.profile = async (req, res) => {
 
     const userData = users[0];
     delete userData.password;
+    userData.profile_image = getFormattedImagePath(userData.profile_image);
 
     res.status(200).json(userData);
   } catch (error) {
