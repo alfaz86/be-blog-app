@@ -1,4 +1,8 @@
 const mysql = require('mysql2');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+
+const sqliteDbPath = path.resolve(__dirname, '../../database.sqlite');
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -22,6 +26,14 @@ pool.on('error', (err) => {
   console.error('Error in the connection pool: ', err);
 });
 
-const db = pool.promise();
+const mysqlDB = pool.promise();
 
-module.exports = db;
+const sqliteDB = new sqlite3.Database(sqliteDbPath, (err) => {
+  if (err) {
+    console.error('Failed to open SQLite database:', err.message);
+  } else {
+    console.log('Connected to the SQLite database.');
+  }
+});
+
+module.exports = { mysqlDB, sqliteDB };

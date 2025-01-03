@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const { mysqlDB, sqliteDB } = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { getFormattedImagePath } = require('../utils/imageHelper');
@@ -14,21 +14,31 @@ exports.register = async (req, res) => {
 
   try {
     // Periksa apakah email atau username sudah terdaftar
-    const [existingUser] = await db.query('SELECT * FROM users WHERE email = ? OR username = ?', [email, username]);
-    if (existingUser.length > 0) {
-      return res.status(400).json({ message: 'Email or username already registered' });
-    }
+    sqliteDB.get('SELECT * FROM users WHERE email = ? OR username = ?', [email, username], async (err, existingUser) => {
+      if (err) {
+        return res.status(500).json({ message: 'Internal server error.', error: err.message });
+      }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email or username already registered' });
+      }
 
-    // Simpan pengguna
-    const [result] = await db.query(
-      'INSERT INTO users (name, email, username, password) VALUES (?, ?, ?, ?)',
-      [name, email, username, hashedPassword]
-    );
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-    res.status(201).json({ id: result.insertId, name, email, username });
+      // Simpan pengguna
+      sqliteDB.run(
+        'INSERT INTO users (name, email, username, password) VALUES (?, ?, ?, ?)',
+        [name, email, username, hashedPassword],
+        function (err) {
+          if (err) {
+            return res.status(500).json({ message: 'Error saving user.', error: err.message });
+          }
+
+          res.status(201).json({ id: this.lastID, name, email, username });
+        }
+      );
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -40,47 +50,50 @@ exports.login = async (req, res) => {
 
   try {
     // Cari pengguna berdasarkan email atau username
-    const [users] = await db.query(
+    sqliteDB.get(
       'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1',
-      [identifier, identifier]
-    );
+      [identifier, identifier],
+      async (err, user) => {
+        if (err) {
+          return res.status(500).json({ message: 'Internal server error.', error: err.message });
+        }
 
-    if (users.length === 0) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
+        if (!user) {
+          return res.status(404).json({ message: 'User not found.' });
+        }
 
-    const user = users[0];
+        // Verifikasi password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+          return res.status(401).json({ message: 'Invalid credentials.' });
+        }
 
-    // Verifikasi password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+        // Buat token JWT
+        const token = jwt.sign(
+          {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            profile_image: getFormattedImagePath(user.profile_image),
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: process.env.JWT_TTL || '1h' }
+        );
 
-    // Buat token JWT
-    const token = jwt.sign(
-      {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        profile_image: getFormattedImagePath(user.profile_image),
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_TTL || '1h' }
-    );
-
-    res.status(200).json({
-      message: 'Login successful.',
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        profile_image: getFormattedImagePath(user.profile_image)
+        res.status(200).json({
+          message: 'Login successful.',
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            profile_image: getFormattedImagePath(user.profile_image),
+          },
+        });
       }
-    });
+    );
   } catch (error) {
     res.status(500).json({ message: 'Internal server error.', error: error.message });
   }
@@ -91,7 +104,7 @@ exports.profile = async (req, res) => {
   const { user } = req;
 
   try {
-    const [users] = await db.query('SELECT * FROM users WHERE id = ?', [user.id]);
+    const [users] = await mysqlDB.query('SELECT * FROM users WHERE id = ?', [user.id]);
 
     if (users.length === 0) {
       return res.status(404).json({ message: 'User not found.' });

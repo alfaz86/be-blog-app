@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const { mysqlDB, sqliteDB } = require('../config/db');
 
 exports.getAllComments = (req, res) => {
   db.query('SELECT * FROM comments', (err, results) => {

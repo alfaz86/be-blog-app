@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const { mysqlDB, sqliteDB } = require('../config/db');
 const { getFormattedImagePath } = require('../utils/imageHelper');
 const multer = require('multer');
 const path = require('path');
@@ -21,10 +21,10 @@ exports.getAllArticles = async (req, res) => {
   try {
     const offset = (page - 1) * perPage;
 
-    const [totalResult] = await db.query('SELECT COUNT(*) AS total FROM articles');
+    const [totalResult] = await mysqlDB.query('SELECT COUNT(*) AS total FROM articles');
     const totalArticles = totalResult[0].total;
 
-    const [articles] = await db.query(
+    const [articles] = await mysqlDB.query(
       `
       SELECT 
         articles.*, 
@@ -112,7 +112,7 @@ exports.createArticle = async (req, res) => {
 
   try {
     // Menggunakan connection pool untuk menjalankan query
-    const [result] = await db.query('INSERT INTO articles SET ?', [newArticle]);
+    const [result] = await mysqlDB.query('INSERT INTO articles SET ?', [newArticle]);
 
     // Mengambil artikel yang baru dibuat
     const createdArticle = {
@@ -150,7 +150,7 @@ exports.uploadCoverImage = (req, res, next) => {
 exports.getArticleById = async (req, res) => {
   const { id } = req.params;
   try {
-    const [article] = await db.query(
+    const [article] = await mysqlDB.query(
       `
       SELECT 
         articles.*, 
