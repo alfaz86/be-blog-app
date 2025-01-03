@@ -6,9 +6,9 @@ const usersRoutes = require('./../src/routes/usersRoutes');
 const articlesRoutes = require('./../src/routes/articlesRoutes');
 const commentsRoutes = require('./../src/routes/commentsRoutes');
 const authRoutes = require('./../src/routes/authRoutes');
-const serverless = require('serverless-http');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 app.use(cors({
   origin: '*',
@@ -27,6 +27,9 @@ apiRouter.use('/articles', articlesRoutes);
 apiRouter.use('/comments', commentsRoutes);
 
 app.use('/api', apiRouter);
+app.get("/", (req, res) => {
+  res.json({ message: 'Welcome to the Blog App API' });
+});
 
 app.use((req, res, next) => {
   res.status(404).json({ message: 'Resource not found' });
@@ -37,11 +40,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Internal server error', error: err.message });
 });
 
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server is running locally on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Server is running locally on port ${PORT}`);
+});
 
-module.exports = serverless(app);
+module.exports = app;

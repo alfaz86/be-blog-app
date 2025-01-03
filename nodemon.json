@@ -1,5 +1,5 @@
 {
-  "watch": ["src"],
+  "watch": ["src", "api"],
   "ext": "js,json",
   "ignore": ["node_modules"],
   "exec": "node api/index.js"
