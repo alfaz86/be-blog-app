@@ -1,18 +1,8 @@
 const db = require('../config/db');
 const { getFormattedImagePath } = require('../utils/imageHelper');
-const multer = require('multer');
-const path = require('path');
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'public/images/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-
-const upload = multer({ storage: storage });
+const upload = require('../middleware/uploadS3');
+const ApiResponse = require('../utils/ApiResponse');
+const { slugify } = require('../utils/articleHelper');
 
 exports.getAllArticles = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -35,6 +25,7 @@ exports.getAllArticles = async (req, res) => {
         users.profile_image
       FROM articles
       LEFT JOIN users ON articles.user_id = users.id
+      ORDER BY articles.created_at DESC
       LIMIT ? OFFSET ?
       `,
       [perPage, offset]
@@ -71,28 +62,31 @@ exports.getAllArticles = async (req, res) => {
       ? `${req.protocol}://${req.get('host')}${req.baseUrl}?page=${page - 1}&per_page=${perPage}`
       : null;
 
-    res.status(200).json(
-      formattedArticles
-      // {
-      //   data: formattedArticles,
-      //   meta: {
-      //     total: totalArticles,
-      //     per_page: perPage,
-      //     current_page: page,
-      //     total_pages: totalPages,
-      //     next_page: nextPageUrl,
-      //     prev_page: prevPageUrl,
-      //   }
-      // }
+    return ApiResponse.successResponse(
+      res,
+      formattedArticles,
+      'Article list',
+      200
     );
+    // {
+    //   data: formattedArticles,
+    //   meta: {
+    //     total: totalArticles,
+    //     per_page: perPage,
+    //     current_page: page,
+    //     total_pages: totalPages,
+    //     next_page: nextPageUrl,
+    //     prev_page: prevPageUrl,
+    //   }
+    // }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return ApiResponse.errorResponse(res, error.message, 500);
   }
 };
 
 exports.createArticle = async (req, res) => {
   const { title, description, body_html, tags } = req.body;
-  const coverImage = req.file ? req.file.filename : null;
+  const coverImage = req.file.location;
   const user = req.user;
 
   // Validasi input
@@ -100,13 +94,19 @@ exports.createArticle = async (req, res) => {
     return res.status(400).json({ message: 'All fields are required' });
   }
 
+  // Validasi tags
+  if (!Array.isArray(tags)) {
+    return res.status(400).json({ message: 'Tags must be an array' });
+  }
+
   // Membuat artikel baru
   const newArticle = {
     title,
+    slug: slugify(title),
     description,
     body_html,
     tags: JSON.stringify(tags),
-    cover_image: coverImage ? `/${coverImage}` : "/cover-image.png",
+    cover_image: coverImage,
     user_id: user.id,
   };
 
@@ -125,27 +125,19 @@ exports.createArticle = async (req, res) => {
       user_id: user.id,
     };
 
-    res.status(201).json({
-      message: 'Article created successfully',
-      article: createdArticle,
-    });
+    return ApiResponse.successResponse(
+      res,
+      createdArticle,
+      'Article created successfully',
+      201
+    )
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Internal server error', error: err.message });
+    return ApiResponse.errorResponse(res, err.message, 500);
   }
 };
 
-// Middleware upload untuk menangani file gambar
-exports.uploadCoverImage = (req, res, next) => {
-  upload.single('cover_image')(req, res, (err) => {
-    if (err) {
-      console.error('Error in multer middleware:', err);
-      return res.status(500).json({ error: 'File upload error' });
-    }
-    console.log('Multer File:', req.file);
-    next();
-  });
-};
+exports.uploadCoverImage = upload.single('cover_image');
 
 exports.getArticleById = async (req, res) => {
   const { id } = req.params;
@@ -191,8 +183,13 @@ exports.getArticleById = async (req, res) => {
       },
     };
 
-    res.status(200).json(formattedArticle);
+    return ApiResponse.successResponse(
+      res,
+      formattedArticle,
+      'Article detail',
+      200
+    );
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return ApiResponse.errorResponse(res, error.message, 500);
   }
 };

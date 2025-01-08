@@ -2,6 +2,7 @@ const db = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { getFormattedImagePath } = require('../utils/imageHelper');
+const ApiResponse = require('../utils/ApiResponse');
 
 // Registrasi
 exports.register = async (req, res) => {
@@ -16,7 +17,7 @@ exports.register = async (req, res) => {
     // Periksa apakah email atau username sudah terdaftar
     const [existingUser] = await db.query('SELECT * FROM users WHERE email = ? OR username = ?', [email, username]);
     if (existingUser.length > 0) {
-      return res.status(400).json({ message: 'Email or username already registered' });
+      return ApiResponse.validationResponse(res, { email: 'Email or username already registered' }, 'Validation errors', 400);
     }
 
     // Hash password
@@ -28,9 +29,14 @@ exports.register = async (req, res) => {
       [name, email, username, hashedPassword]
     );
 
-    res.status(201).json({ id: result.insertId, name, email, username });
+    return ApiResponse.successResponse(
+      res,
+      { id: result.insertId, name, email, username }
+      , 'User registered successfully',
+      201
+    );
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return ApiResponse.errorResponse(res, err.message, 500);
   }
 };
 
@@ -46,7 +52,7 @@ exports.login = async (req, res) => {
     );
 
     if (users.length === 0) {
-      return res.status(404).json({ message: 'User not found.' });
+      return ApiResponse.errorResponse(res, 'User not found.', 404);
     }
 
     const user = users[0];
@@ -54,7 +60,7 @@ exports.login = async (req, res) => {
     // Verifikasi password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
+      return ApiResponse.unauthorizedResponse(res, 'Invalid credentials');
     }
 
     // Buat token JWT
@@ -70,19 +76,23 @@ exports.login = async (req, res) => {
       { expiresIn: process.env.JWT_TTL || '1h' }
     );
 
-    res.status(200).json({
-      message: 'Login successful.',
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        profile_image: getFormattedImagePath(user.profile_image)
-      }
-    });
+    return ApiResponse.successResponse(
+      res,
+      {
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          profile_image: getFormattedImagePath(user.profile_image)
+        }
+      },
+      'Login successful',
+      200
+    );
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error.', error: error.message });
+    return ApiResponse.errorResponse(res, error.message, 500);
   }
 };
 
@@ -101,8 +111,13 @@ exports.profile = async (req, res) => {
     delete userData.password;
     userData.profile_image = getFormattedImagePath(userData.profile_image);
 
-    res.status(200).json(userData);
+    return ApiResponse.successResponse(
+      res,
+      userData,
+      'User profile',
+      200
+    );
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error.', error: error.message });
+    return ApiResponse.errorResponse(res, error.message, 500);
   }
 };

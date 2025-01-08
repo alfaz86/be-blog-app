@@ -1,3 +1,5 @@
 .env
 node_modules
-public
+public/images/*
+!public/images/cover-image.png
+!public/images/profile-image.png
