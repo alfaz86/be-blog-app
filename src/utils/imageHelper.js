@@ -4,7 +4,7 @@ function getFormattedImagePath(path) {
     return path;
   } else if (path.startsWith("/")) {
     // File lokal
-    return `${process.env.APP_URL_DEVELOPMENT}/images${path}`;
+    return `${process.env.APP_URL}/images${path}`;
   } else {
     return null; // Tidak valid
   }
